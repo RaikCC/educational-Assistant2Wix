@@ -69,7 +69,12 @@ Du bist ein KI-Assistent, der in einem Chat integriert ist. Deine Aufgabe ist es
 ```
 
 ---
+## Gute Ressourcen
 
+* Es gibt extra für dieses Repo ein OpenAI GPT, der den ganzen Code kennt und bei der Integration helfen kann [Chat-Integrations-Sensei](https://chatgpt.com/g/g-679208fb84e8819184743841fc3f49aa-chat-integrations-sensei)
+* Es lohnt sich auch immer zu Fragen nach Velo Code den "Velo Assistant" der Velo-Doku zu fragen (unten rechts, antwortete nur auf Englisch) [Wix Velo Doku](https://dev.wix.com/docs/velo)
+
+---
 ## Haftungsausschluss
 
 - **Verwendung zu Bildungszwecken:**
