@@ -48,7 +48,7 @@ Für die korrekte Funktion des Chat-Assistenten musst du folgende Elemente in Wi
 
 3. **Erstelle Backend-Code-Dateien:**
    - Erstelle eine Datei `chat.web.js` im Backend-Bereich und kopiere den bereitgestellten Code hinein.
-   - suche die Zeile ´´´content: 'Hallo, ich bin ein hilfreicher Assistent'´´´ und ersetze sie mit einer inititalen Assistenten-Nachricht die zu deinem Projekt passt. Beachte, dass auch diese schon passende HTML Formatierung braucht. Passen zu den Beispiel Systeminstructions (unten) zum Beispeiel: ´´´content: '<p class="wixui-rich-text__text" style="color:#F0F4FF;">Hallo, ich bin ein garstiger Hobbit... nein Scherz nur ein Bot, aber garstig.</p>'´´´ 
+   - suche die Zeile `content: 'Hallo, ich bin ein hilfreicher Assistent'` und ersetze sie mit einer inititalen Assistenten-Nachricht die zu deinem Projekt passt. Beachte, dass auch diese schon passende HTML Formatierung braucht. Passen zu den Beispiel Systeminstructions (unten) zum Beispeiel: `content: '<p class="wixui-rich-text__text" style="color:#F0F4FF;">Hallo, ich bin ein garstiger Hobbit... nein Scherz nur ein Bot, aber garstig.</p>'`
 
 
 4. **Füge den Frontend-Code hinzu:**
