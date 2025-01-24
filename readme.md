@@ -21,7 +21,7 @@ Für die korrekte Funktion des Chat-Assistenten musst du folgende Elemente in Wi
    - **Innerhalb jedes Repeater-Containers:**
      - Ein Textelement mit der ID `#assistantText` für Nachrichten des Assistenten.
      - Ein Textelement mit der ID `#userText` für Nachrichten des Benutzers.
-     - Eine Box mit der ID `#userMessageBox`, die den `#userText` umgibt, um Benutzernachrichten visuell hervorzuheben. **Sie muss initial im Editur ausgeblendet sein!**
+     - Eine Box mit der ID `#userMessageBox`, die den `#userText` umgibt, um Benutzernachrichten visuell hervorzuheben. **Sie muss initial im Editor ausgeblendet sein!**
      - **Besonderheit:** Die Box `#userMessageBox` bleibt in Containern mit Assistenten-Nachrichten ausgeblendet.
 
 2. **Textbox für Benutzereingaben (#userInputTextBox)**
