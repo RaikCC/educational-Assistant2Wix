@@ -31,8 +31,8 @@ Für die korrekte Funktion des Chat-Assistenten musst du folgende Elemente in Wi
    - Dieser Button wird verwendet, um die eingegebene Nachricht zu senden. Der Button wird basierend auf dem Inhalt der Textbox aktiviert oder deaktiviert.
 
 4. **Indikatoren**
-   - **#establishingConnectionInfo**: Ein visuelles Element, das anzeigt, dass der Chat initialisiert wird. Dieses Element muss initial **aus**geblendet sein.
-   - **#isThinkingIndicator**: Ein visuelles Element, das signalisiert, dass der Assistent eine Antwort generiert. Auch dieses Element muss initial **ein**geblendet sein.
+   - **#establishingConnectionInfo**: Ein visuelles Element, das anzeigt, dass der Chat initialisiert wird. Dieses Element muss initial **ein**geblendet sein.
+   - **#isThinkingIndicator**: Ein visuelles Element, das signalisiert, dass der Assistent eine Antwort generiert.Dieses Element muss initial **aus**geblendet sein.
 
 > **Wichtig:** Die Element-IDs müssen exakt wie oben angegeben lauten, da der bereitgestellte Code diese IDs verwendet. Änderungen an den IDs erfordern entsprechende Anpassungen im Code.
 
