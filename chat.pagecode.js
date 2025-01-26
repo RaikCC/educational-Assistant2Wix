@@ -10,6 +10,8 @@ const debugError = (...args) => ENABLE_FRONTEND_DEBUG && console.error('[Fronten
 $w.onReady(() => {
     $w('#chatRepeater').data = [];
     $w("#submitMessageButton").disable();
+    $w("#resetButton").disable(); // Initial deaktivieren
+    
     // Chat initialisieren
     initializeChat()
         .then(initResult => {
@@ -32,6 +34,13 @@ $w.onReady(() => {
                 assistant: message.role === 'assistant' ? message.content[0].text.value : null,
                 user: message.role === 'user' ? message.content[0].text.value : null
             }));
+
+            // Reset-Button nur deaktivieren, wenn der Chat leer oder nur die Begrüßung vorhanden ist
+            if (initialData.length <= 1) {
+                $w("#resetButton").disable();
+            } else {
+                $w("#resetButton").enable();
+            }
 
             debugLog('[Frontend] Initialisiere Chat mit Historie:', initialData);
 
@@ -63,7 +72,11 @@ $w.onReady(() => {
             function setInputEnabled(enabled) {
                 if (enabled) {
                     $w("#userInputTextBox").enable();
-                    $w("#resetButton").enable();
+                    // Reset-Button nur aktivieren, wenn mehr als eine Nachricht vorhanden ist
+                    const currentData = $w("#chatRepeater").data;
+                    if (currentData.length > 1) {
+                        $w("#resetButton").enable();
+                    }
                     // Button nur aktivieren, wenn Text vorhanden
                     const currentText = $w("#userInputTextBox").value.trim();
                     if (currentText.length > 0) {
@@ -112,6 +125,8 @@ $w.onReady(() => {
                 try {
                     // Thinking Indicator anzeigen bevor das Polling startet
                     $w('#isThinkingIndicator').show();
+                    // Während des Nachdenkens alle Eingaben deaktivieren
+                    setInputEnabled(false);
 
                     // Nachricht starten und Run ID erhalten
                     const startResponse = await startMessage(userMessage);
