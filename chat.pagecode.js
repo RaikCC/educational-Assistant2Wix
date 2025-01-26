@@ -2,7 +2,7 @@ import { initializeChat, startMessage, pollRunStatus, getChatHistory } from 'bac
 import { session } from "wix-storage-frontend";
 
 // Debug-Schalter für Frontend-Logging
-const ENABLE_FRONTEND_DEBUG = true;
+const ENABLE_FRONTEND_DEBUG = false;
 
 // Debug-Logging Funktion
 const debugLog = (...args) => ENABLE_FRONTEND_DEBUG && console.log('[Frontend]', ...args);
