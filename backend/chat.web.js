@@ -63,7 +63,6 @@ async function retryableFetch(fetchOperation, operationName = 'Unbekannte Operat
     throw lastError;
 }
 
-// TODO: handle temporarily unavailable OpenAI API with 504 status code. Solution: pause and retry
 const elevatedGetSecretValue = elevate(secrets.getSecretValue);
 
 let openAiApiKey = null;
@@ -79,6 +78,12 @@ let currentThreadId = null;
  */
 async function _initializeChat() {
     try {
+        // Wenn bereits ein Thread existiert, diesen wiederverwenden
+        if (currentThreadId) {
+            debugLog('[Backend] Verwende existierenden Thread:', currentThreadId);
+            return { success: true, threadId: currentThreadId };
+        }
+
         openAiApiKey = (await elevatedGetSecretValue("OpenAI-API-KEY")).value;
         assistantId = (await elevatedGetSecretValue("Assistant-ID")).value;
         
@@ -95,6 +100,7 @@ async function _initializeChat() {
 
         const thread = await response.json();
         currentThreadId = thread.id;
+        debugLog('[Backend] Neuer Thread erstellt:', currentThreadId);
 
         // Initial message hinzufügen
         await retryableFetch(() =>

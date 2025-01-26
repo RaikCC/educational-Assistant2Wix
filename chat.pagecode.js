@@ -1,7 +1,7 @@
 import { initializeChat, startMessage, pollRunStatus, getChatHistory } from 'backend/chat.web';
 
 // Debug-Schalter für Frontend-Logging
-const ENABLE_FRONTEND_DEBUG = false;
+const ENABLE_FRONTEND_DEBUG = true;
 
 // Debug-Logging Funktion
 const debugLog = (...args) => ENABLE_FRONTEND_DEBUG && console.log('[Frontend]', ...args);
@@ -144,6 +144,14 @@ $w.onReady(() => {
                             };
                             $w("#chatRepeater").data = [...$w("#chatRepeater").data, assistantMessage];
                             debugLog('[Frontend] Antwort hinzugefügt:', pollResponse.response);
+                            
+                            // Debug: Aktuelle Chat-Historie nach Assistenten-Antwort abrufen
+                            const historyResponse = await getChatHistory();
+                            if (historyResponse.success) {
+                                debugLog('[Frontend] Aktuelle Chat-Historie nach Assistenten-Antwort:', historyResponse.messages);
+                            } else {
+                                debugError('[Frontend] Fehler beim Abrufen der Chat-Historie:', historyResponse.error);
+                            }
                         } else if (pollResponse.status === 'failed') {
                             throw new Error(pollResponse.error || 'Verarbeitung fehlgeschlagen');
                         }
