@@ -26,11 +26,14 @@ $w.onReady(() => {
                 return;
             }
 
-            // Erste Nachricht aus der Historie in das Frontend-Format konvertieren
-            const initialData = [{
-                _id: '1',
-                assistant: history.messages[0].content[0].text.value
-            }];
+            // Alle Nachrichten aus der Historie in das Frontend-Format konvertieren
+            const initialData = history.messages.reverse().map((message, index) => ({
+                _id: (index + 1).toString(),
+                assistant: message.role === 'assistant' ? message.content[0].text.value : null,
+                user: message.role === 'user' ? message.content[0].text.value : null
+            }));
+
+            debugLog('[Frontend] Initialisiere Chat mit Historie:', initialData);
 
             // Repeater konfigurieren
             $w('#chatRepeater').onItemReady(($item, itemData) => {
