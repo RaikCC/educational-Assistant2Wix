@@ -162,6 +162,7 @@ $w.onReady(() => {
                                 _id: assistantId,
                                 assistant: pollResponse.response
                             };
+                            $w('#isThinkingIndicator').hide(); // Thinking Indicator ausblenden bevor die Nachrichten gerendert werden für besseres UX
                             $w("#chatRepeater").data = [...$w("#chatRepeater").data, assistantMessage];
                             debugLog('[Frontend] Antwort hinzugefügt:', pollResponse.response);
                             
@@ -193,8 +194,7 @@ $w.onReady(() => {
                     };
                     $w("#chatRepeater").data = [...$w("#chatRepeater").data, errorMessage];
                 } finally {
-                    // Thinking Indicator ausblenden und Eingabeelemente wieder aktivieren
-                    $w('#isThinkingIndicator').hide();
+                    // Eingabeelemente wieder aktivieren
                     setInputEnabled(true);
                 }
             }
