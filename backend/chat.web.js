@@ -225,7 +225,7 @@ async function _pollRunStatus(runId, threadId) {
         // Bei 'completed' die Antwort hinzufügen
         if (runStatus.status === 'completed') {
             const messagesResponse = await retryableFetch(() =>
-                fetch(`${OPENAI_API_URL}/threads/${threadId}/messages`, {
+                fetch(`${OPENAI_API_URL}/threads/${threadId}/messages?limit=99&order=desc`, {
                     headers: {
                         'Authorization': `Bearer ${apiKey}`,
                         'OpenAI-Beta': 'assistants=v2'
@@ -266,7 +266,7 @@ async function _getChatHistory(threadId) {
         const { apiKey } = await loadSecrets();
 
         const response = await retryableFetch(() =>
-            fetch(`${OPENAI_API_URL}/threads/${threadId}/messages`, {
+            fetch(`${OPENAI_API_URL}/threads/${threadId}/messages?limit=99`, {
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
                     'OpenAI-Beta': 'assistants=v2'
