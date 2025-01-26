@@ -11,9 +11,9 @@ const debugLog = (...args) => ENABLE_BACKEND_DEBUG && console.log('[Backend]', .
 const debugError = (...args) => ENABLE_BACKEND_DEBUG && console.error('[Backend]', ...args);
 
 // Konfiguration für Retry-Mechanismus
-// Exponentielles Backoff: 500ms -> 1s -> 2s
+// Exponentielles Backoff: 1ms -> 2ms -> 4ms -> 8ms -> 16ms -> 32ms -> 64ms -> 128ms -> 256ms
 // Moderate Wartezeiten um API-Limits zu respektieren aber User-Experience zu verbessern
-const RETRY_DELAYS = [500, 1000, 2000]; // Verzögerungen in Millisekunden
+const RETRY_DELAYS = [1, 2, 4, 8, 16, 32, 64, 128, 256]; // Verzögerungen in Millisekunden
 const RETRYABLE_STATUS_CODES = [504, 503, 502]; // Status Codes, die einen Retry rechtfertigen
 
 /**
@@ -65,33 +65,31 @@ async function retryableFetch(fetchOperation, operationName = 'Unbekannte Operat
 
 const elevatedGetSecretValue = elevate(secrets.getSecretValue);
 
-let openAiApiKey = null;
-let assistantId = null;
-
-// Wichtig: Basis-URL ohne /beta
+// Basis-URL ohne /beta
 const OPENAI_API_URL = "https://api.openai.com/v1";
 
-let currentThreadId = null;
+/**
+ * Lädt die benötigten Secrets aus dem Backend
+ * @returns {Promise<{apiKey: string, assistantId: string}>}
+ */
+async function loadSecrets() {
+    const openAiApiKey = (await elevatedGetSecretValue("OpenAI-API-KEY")).value;
+    const assistantId = (await elevatedGetSecretValue("Assistant-ID")).value;
+    return { apiKey: openAiApiKey, assistantId };
+}
 
 /**
  * Initialisiert den Chat, indem ein neuer Thread erstellt wird.
  */
 async function _initializeChat() {
     try {
-        // Wenn bereits ein Thread existiert, diesen wiederverwenden
-        if (currentThreadId) {
-            debugLog('[Backend] Verwende existierenden Thread:', currentThreadId);
-            return { success: true, threadId: currentThreadId };
-        }
-
-        openAiApiKey = (await elevatedGetSecretValue("OpenAI-API-KEY")).value;
-        assistantId = (await elevatedGetSecretValue("Assistant-ID")).value;
+        const { apiKey, assistantId } = await loadSecrets();
         
         const response = await retryableFetch(() => 
             fetch(`${OPENAI_API_URL}/threads`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${openAiApiKey}`,
+                    'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json',
                     'OpenAI-Beta': 'assistants=v2'
                 }
@@ -99,15 +97,14 @@ async function _initializeChat() {
         );
 
         const thread = await response.json();
-        currentThreadId = thread.id;
-        debugLog('[Backend] Neuer Thread erstellt:', currentThreadId);
+        debugLog('[Backend] Neuer Thread erstellt:', thread.id);
 
         // Initial message hinzufügen
         await retryableFetch(() =>
-            fetch(`${OPENAI_API_URL}/threads/${currentThreadId}/messages`, {
+            fetch(`${OPENAI_API_URL}/threads/${thread.id}/messages`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${openAiApiKey}`,
+                    'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json',
                     'OpenAI-Beta': 'assistants=v2'
                 },
@@ -125,21 +122,20 @@ async function _initializeChat() {
     }
 }
 
-async function _startMessage(message) {
-    if (!currentThreadId) {
-        const init = await _initializeChat();
-        if (!init.success) {
-            return { success: false, error: 'Chat konnte nicht initialisiert werden.' };
-        }
+async function _startMessage(message, threadId) {
+    if (!threadId) {
+        return { success: false, error: 'Keine ThreadID angegeben.' };
     }
 
     try {
+        const { apiKey, assistantId } = await loadSecrets();
+
         // Nachricht zum Thread hinzufügen
         await retryableFetch(() =>
-            fetch(`${OPENAI_API_URL}/threads/${currentThreadId}/messages`, {
+            fetch(`${OPENAI_API_URL}/threads/${threadId}/messages`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${openAiApiKey}`,
+                    'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json',
                     'OpenAI-Beta': 'assistants=v2'
                 },
@@ -152,10 +148,10 @@ async function _startMessage(message) {
 
         // Run erstellen
         const runResponse = await retryableFetch(() =>
-            fetch(`${OPENAI_API_URL}/threads/${currentThreadId}/runs`, {
+            fetch(`${OPENAI_API_URL}/threads/${threadId}/runs`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${openAiApiKey}`,
+                    'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json',
                     'OpenAI-Beta': 'assistants=v2'
                 },
@@ -169,7 +165,7 @@ async function _startMessage(message) {
         return { 
             success: true, 
             runId: run.id,
-            threadId: currentThreadId 
+            threadId: threadId 
         };
     } catch (error) {
         debugError('[Error] Fehler beim Starten der Nachricht:', error);
@@ -181,40 +177,66 @@ async function _startMessage(message) {
     }
 }
 
-async function _pollRunStatus(runId) {
-    if (!currentThreadId) {
-        return { success: false, error: 'Kein aktiver Chat-Thread.' };
+async function _pollRunStatus(runId, threadId) {
+    if (!threadId) {
+        return { success: false, error: 'Keine ThreadID angegeben.' };
     }
 
     try {
+        const { apiKey } = await loadSecrets();
+
         const statusResponse = await retryableFetch(() =>
-            fetch(`${OPENAI_API_URL}/threads/${currentThreadId}/runs/${runId}`, {
+            fetch(`${OPENAI_API_URL}/threads/${threadId}/runs/${runId}`, {
                 headers: {
-                    'Authorization': `Bearer ${openAiApiKey}`,
+                    'Authorization': `Bearer ${apiKey}`,
                     'OpenAI-Beta': 'assistants=v2'
                 }
             }), 'Run-Status abfragen'
         );
         const runStatus = await statusResponse.json();
 
+        // Validiere, dass ein Status vorhanden ist
+        if (!runStatus.status) {
+            debugError('[Error] Kein Status in der API-Antwort:', runStatus);
+            return {
+                success: false,
+                error: 'Ungültige API-Antwort: Kein Status vorhanden',
+                details: JSON.stringify(runStatus)
+            };
+        }
+
+        // Validiere, dass der Status ein bekannter Wert ist
+        const validStatuses = ['queued', 'in_progress', 'completed', 'requires_action', 'failed', 'cancelled', 'expired'];
+        if (!validStatuses.includes(runStatus.status)) {
+            debugError('[Error] Unbekannter Status in der API-Antwort:', runStatus.status);
+            return {
+                success: false,
+                error: `Ungültiger Status: ${runStatus.status}`,
+                details: JSON.stringify(runStatus)
+            };
+        }
+
+        // Immer den Status zurückgeben, egal welcher es ist
+        const response = {
+            success: true,
+            status: runStatus.status
+        };
+
+        // Bei 'completed' die Antwort hinzufügen
         if (runStatus.status === 'completed') {
-            // Antwort abrufen
             const messagesResponse = await retryableFetch(() =>
-                fetch(`${OPENAI_API_URL}/threads/${currentThreadId}/messages`, {
+                fetch(`${OPENAI_API_URL}/threads/${threadId}/messages`, {
                     headers: {
-                        'Authorization': `Bearer ${openAiApiKey}`,
+                        'Authorization': `Bearer ${apiKey}`,
                         'OpenAI-Beta': 'assistants=v2'
                     }
                 }), 'Antwort abrufen'
             );
             const messages = await messagesResponse.json();
-            
-            return { 
-                success: true,
-                status: 'completed',
-                response: messages.data[0].content[0].text.value
-            };
-        } else if (runStatus.status === 'failed') {
+            response.response = messages.data[0].content[0].text.value;
+        } 
+        // Bei 'failed' den Fehler hinzufügen
+        else if (runStatus.status === 'failed') {
             const errorMessage = `Run fehlgeschlagen: ${runStatus.last_error?.message || 'Unbekannter Fehler'}`;
             debugError('[Error] ' + errorMessage);
             return {
@@ -222,12 +244,9 @@ async function _pollRunStatus(runId) {
                 status: 'failed',
                 error: errorMessage
             };
-        } else {
-            return {
-                success: true,
-                status: runStatus.status
-            };
         }
+        
+        return response;
     } catch (error) {
         debugError('[Error] Fehler beim Abrufen des Run-Status:', error);
         return { 
@@ -238,16 +257,18 @@ async function _pollRunStatus(runId) {
     }
 }
 
-async function _getChatHistory() {
-    if (!currentThreadId) {
-        return { success: false, error: 'Kein aktiver Chat-Thread.' };
+async function _getChatHistory(threadId) {
+    if (!threadId) {
+        return { success: false, error: 'Keine ThreadID angegeben.' };
     }
 
     try {
+        const { apiKey } = await loadSecrets();
+
         const response = await retryableFetch(() =>
-            fetch(`${OPENAI_API_URL}/threads/${currentThreadId}/messages`, {
+            fetch(`${OPENAI_API_URL}/threads/${threadId}/messages`, {
                 headers: {
-                    'Authorization': `Bearer ${openAiApiKey}`,
+                    'Authorization': `Bearer ${apiKey}`,
                     'OpenAI-Beta': 'assistants=v2'
                 }
             }), 'Chat-Historie abrufen'
@@ -260,36 +281,11 @@ async function _getChatHistory() {
     }
 }
 
-async function _resetChat() {
-    try {
-        // Thread-ID zurücksetzen
-        currentThreadId = null;
-        
-        // Neuen Chat initialisieren
-        const initResult = await _initializeChat();
-        if (!initResult.success) {
-            return { success: false, error: 'Chat konnte nicht zurückgesetzt werden.' };
-        }
-
-        // Chat-Historie des neuen Threads abrufen
-        const history = await _getChatHistory();
-        if (!history.success) {
-            return { success: false, error: 'Chat-Historie konnte nicht abgerufen werden.' };
-        }
-
-        return { success: true, messages: history.messages };
-    } catch (error) {
-        debugError('Fehler beim Zurücksetzen des Chats:', error);
-        return { success: false, error: error.message };
-    }
-}
-
 // Öffentliche Funktionen mit Permissions
 export const initializeChat = webMethod(Permissions.Anyone, () => _initializeChat());
-export const startMessage = webMethod(Permissions.Anyone, (message) => _startMessage(message));
-export const pollRunStatus = webMethod(Permissions.Anyone, (runId) => _pollRunStatus(runId));
-export const getChatHistory = webMethod(Permissions.Anyone, () => _getChatHistory());
-export const resetChat = webMethod(Permissions.Anyone, () => _resetChat());
+export const startMessage = webMethod(Permissions.Anyone, (message, threadId) => _startMessage(message, threadId));
+export const pollRunStatus = webMethod(Permissions.Anyone, (runId, threadId) => _pollRunStatus(runId, threadId));
+export const getChatHistory = webMethod(Permissions.Anyone, (threadId) => _getChatHistory(threadId));
 
 // Alte sendMessage-Funktion als Referenz behalten (auskommentiert)
 // export const sendMessage = webMethod(Permissions.Anyone, (message) => _sendMessage(message));

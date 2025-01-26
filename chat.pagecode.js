@@ -1,26 +1,57 @@
-import { initializeChat, startMessage, pollRunStatus, getChatHistory, resetChat } from 'backend/chat.web';
+import { initializeChat, startMessage, pollRunStatus, getChatHistory } from 'backend/chat.web';
+import { session } from "wix-storage-frontend";
 
 // Debug-Schalter für Frontend-Logging
-const ENABLE_FRONTEND_DEBUG = false;
+const ENABLE_FRONTEND_DEBUG = true;
 
 // Debug-Logging Funktion
 const debugLog = (...args) => ENABLE_FRONTEND_DEBUG && console.log('[Frontend]', ...args);
 const debugError = (...args) => ENABLE_FRONTEND_DEBUG && console.error('[Frontend]', ...args);
+
+// Konstante für den Session Storage Key
+const THREAD_ID_KEY = "chatThreadId";
+
+// Konstanten für Retry-Mechanismus
+const POLL_RETRY_DELAYS = [100, 200, 400, 800]; // Verzögerungen in Millisekunden
+const RETRYABLE_STATUS_CODES = [504, 503, 502];
+
+// Hilfsfunktion für das Warten
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 $w.onReady(() => {
     $w('#chatRepeater').data = [];
     $w("#submitMessageButton").disable();
     $w("#resetButton").disable(); // Initial deaktivieren
     
+    // Funktion zum Initialisieren des Chats
+    async function initializeChatSession() {
+        const existingThreadId = session.getItem(THREAD_ID_KEY);
+        
+        if (existingThreadId) {
+            debugLog('[Frontend] Verwende existierenden Thread:', existingThreadId);
+            return { success: true, threadId: existingThreadId };
+        }
+        
+        const initResult = await initializeChat();
+        if (!initResult.success) {
+            debugError('Chat konnte nicht initialisiert werden:', initResult.error);
+            return initResult;
+        }
+        
+        session.setItem(THREAD_ID_KEY, initResult.threadId);
+        debugLog('[Frontend] Neuer Thread erstellt und gespeichert:', initResult.threadId);
+        return initResult;
+    }
+    
     // Chat initialisieren
-    initializeChat()
+    initializeChatSession()
         .then(initResult => {
             if (!initResult.success) {
                 debugError('Chat konnte nicht initialisiert werden:', initResult.error);
                 return;
             }
             
-            return getChatHistory();
+            return getChatHistory(initResult.threadId);
         })
         .then(history => {
             if (!history.success) {
@@ -91,6 +122,12 @@ $w.onReady(() => {
 
             // Funktion zum Senden der Nachricht
             async function handleSubmit() {
+                const threadId = session.getItem(THREAD_ID_KEY);
+                if (!threadId) {
+                    debugError('[Frontend] Keine ThreadID gefunden');
+                    return;
+                }
+
                 // Nochmals prüfen, ob Feld wirklich nicht leer ist
                 const userMessage = $w("#userInputTextBox").value.trim();
                 if (!userMessage) {
@@ -129,7 +166,7 @@ $w.onReady(() => {
                     setInputEnabled(false);
 
                     // Nachricht starten und Run ID erhalten
-                    const startResponse = await startMessage(userMessage);
+                    const startResponse = await startMessage(userMessage, threadId);
                     
                     if (!startResponse.success) {
                         throw new Error(startResponse.error || 'Fehler beim Starten der Nachricht');
@@ -147,7 +184,7 @@ $w.onReady(() => {
                     while (!isCompleted && retryCount < maxRetries) {
                         await new Promise(resolve => setTimeout(resolve, retryDelay)); // warten
                         
-                        const pollResponse = await pollRunStatus(runId);
+                        const pollResponse = await pollWithRetry(runId, threadId, userMessage);
                         debugLog('[Frontend] Poll Response:', pollResponse);
                         
                         if (!pollResponse.success) {
@@ -167,7 +204,7 @@ $w.onReady(() => {
                             debugLog('[Frontend] Antwort hinzugefügt:', pollResponse.response);
                             
                             // Debug: Aktuelle Chat-Historie nach Assistenten-Antwort abrufen
-                            const historyResponse = await getChatHistory();
+                            const historyResponse = await getChatHistory(threadId);
                             if (historyResponse.success) {
                                 debugLog('[Frontend] Aktuelle Chat-Historie nach Assistenten-Antwort:', historyResponse.messages);
                             } else {
@@ -196,6 +233,8 @@ $w.onReady(() => {
                 } finally {
                     // Eingabeelemente wieder aktivieren
                     setInputEnabled(true);
+                    // Sicherstellen, dass der Thinking Indicator ausgeblendet ist
+                    $w('#isThinkingIndicator').hide();
                 }
             }
 
@@ -276,15 +315,23 @@ $w.onReady(() => {
                 $w('#establishingConnectionInfo').show();
                 
                 try {
-                    // Chat zurücksetzen und neue Historie abrufen
-                    const resetResult = await resetChat();
+                    // ThreadID aus Session Storage löschen
+                    session.removeItem(THREAD_ID_KEY);
                     
-                    if (!resetResult.success) {
-                        throw new Error(resetResult.error || 'Fehler beim Zurücksetzen des Chats');
+                    // Neuen Chat initialisieren
+                    const initResult = await initializeChatSession();
+                    if (!initResult.success) {
+                        throw new Error(initResult.error || 'Fehler beim Initialisieren des Chats');
+                    }
+                    
+                    // Chat-Historie abrufen
+                    const history = await getChatHistory(initResult.threadId);
+                    if (!history.success) {
+                        throw new Error(history.error || 'Fehler beim Abrufen der Chat-Historie');
                     }
                     
                     // Nachrichten in Frontend-Format konvertieren
-                    const initialData = resetResult.messages.reverse().map((message, index) => ({
+                    const initialData = history.messages.reverse().map((message, index) => ({
                         _id: (index + 1).toString(),
                         assistant: message.role === 'assistant' ? message.content[0].text.value : null,
                         user: message.role === 'user' ? message.content[0].text.value : null
@@ -319,3 +366,56 @@ $w.onReady(() => {
             debugError('Fehler bei der Chat-Initialisierung:', error);
         });
 });
+
+// Modifizierte Polling-Funktion mit Retry-Logik
+async function pollWithRetry(runId, threadId, originalMessage = null, retryAttempt = 0) {
+    const MAX_RUN_RETRIES = 10; // Maximale Anzahl von Run-Neustarts
+    
+    for (let i = 0; i <= POLL_RETRY_DELAYS.length; i++) {
+        try {
+            const pollResponse = await pollRunStatus(runId, threadId);
+            
+            // Wenn die Antwort keinen Status hat oder einen ungültigen Status
+            if (!pollResponse.status || !pollResponse.success) {
+                debugError(`[Frontend] Ungültige oder leere Antwort beim ${retryAttempt + 1}. Versuch:`, pollResponse);
+                
+                // Wenn wir noch Versuche übrig haben und die Original-Nachricht haben
+                if (retryAttempt < MAX_RUN_RETRIES && originalMessage) {
+                    debugLog(`[Frontend] Starte neuen Run für die Nachricht (Versuch ${retryAttempt + 1}/${MAX_RUN_RETRIES})`);
+                    
+                    // Warten vor dem Neustart
+                    await wait(1000); // 1 Sekunde warten vor dem Neustart
+                    
+                    // Neuen Run starten
+                    const startResponse = await startMessage(originalMessage, threadId);
+                    if (!startResponse.success) {
+                        throw new Error(`Fehler beim Neustart des Runs: ${startResponse.error}`);
+                    }
+                    
+                    // Rekursiv mit dem neuen Run weitermachen
+                    return pollWithRetry(startResponse.runId, threadId, originalMessage, retryAttempt + 1);
+                }
+                
+                // Wenn keine Versuche mehr übrig sind, Fehler werfen
+                throw new Error('Maximale Anzahl von Neustarts erreicht');
+            }
+            
+            return pollResponse;
+        } catch (error) {
+            // Prüfen ob es sich um einen Timeout-Fehler handelt
+            const isTimeout = error.message?.includes('504') || 
+                            error.message?.includes('503') || 
+                            error.message?.includes('502');
+            
+            // Wenn es ein Timeout ist und wir noch Versuche haben
+            if (isTimeout && i < POLL_RETRY_DELAYS.length) {
+                debugLog(`[Frontend] Polling-Versuch ${i + 1} fehlgeschlagen, warte ${POLL_RETRY_DELAYS[i]}ms vor erneutem Versuch`);
+                await wait(POLL_RETRY_DELAYS[i]);
+                continue;
+            }
+            
+            // Wenn es kein Timeout ist oder keine Versuche mehr übrig sind
+            throw error;
+        }
+    }
+}
