@@ -28,9 +28,13 @@ Für die korrekte Funktion des Chat-Assistenten musst du folgende Elemente in Wi
    - Diese Textbox ermöglicht es dir, deine Nachrichten einzugeben.
 
 3. **Button zum Abschicken der Nachricht (#submitMessageButton)**
-   - Dieser Button wird verwendet, um die eingegebene Nachricht zu senden. Der Button wird basierend auf dem Inhalt der Textbox aktiviert oder deaktiviert.
+   - Dieser Button wird verwendet, um die eingegebene Nachricht zu senden. Der Button wird basierend auf dem Inhalt der Textbox aktiviert oder deaktiviert. Sollte initial **aktiviert** sein.
 
-4. **Indikatoren**
+4. **Reset-Button (#resetButton)**
+   - Der Chat wird über eine Wix-Session gespeichert. Dass heißt, dass der Chat nach einem Reload der Seite wieder da ist. Und auch wenn die Nutzenden auf eine andere Seite gehen und wieder zurück kommen, ist der Chat noch da. Daher braucht es einen Reset-Button, um den Chat zu löschen.
+   - Dieser Button wird verwendet, um den Chat zu resetten. Sollte initial **aktiviert** sein.
+
+5. **Indikatoren**
    - **#establishingConnectionInfo**: Ein visuelles Element, das anzeigt, dass der Chat initialisiert wird. Dieses Element muss initial **ein**geblendet sein.
    - **#isThinkingIndicator**: Ein visuelles Element, das signalisiert, dass der Assistent eine Antwort generiert.Dieses Element muss initial **aus**geblendet sein.
 
