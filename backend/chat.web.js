@@ -260,11 +260,36 @@ async function _getChatHistory() {
     }
 }
 
+async function _resetChat() {
+    try {
+        // Thread-ID zurücksetzen
+        currentThreadId = null;
+        
+        // Neuen Chat initialisieren
+        const initResult = await _initializeChat();
+        if (!initResult.success) {
+            return { success: false, error: 'Chat konnte nicht zurückgesetzt werden.' };
+        }
+
+        // Chat-Historie des neuen Threads abrufen
+        const history = await _getChatHistory();
+        if (!history.success) {
+            return { success: false, error: 'Chat-Historie konnte nicht abgerufen werden.' };
+        }
+
+        return { success: true, messages: history.messages };
+    } catch (error) {
+        debugError('Fehler beim Zurücksetzen des Chats:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 // Öffentliche Funktionen mit Permissions
 export const initializeChat = webMethod(Permissions.Anyone, () => _initializeChat());
 export const startMessage = webMethod(Permissions.Anyone, (message) => _startMessage(message));
 export const pollRunStatus = webMethod(Permissions.Anyone, (runId) => _pollRunStatus(runId));
 export const getChatHistory = webMethod(Permissions.Anyone, () => _getChatHistory());
+export const resetChat = webMethod(Permissions.Anyone, () => _resetChat());
 
 // Alte sendMessage-Funktion als Referenz behalten (auskommentiert)
 // export const sendMessage = webMethod(Permissions.Anyone, (message) => _sendMessage(message));

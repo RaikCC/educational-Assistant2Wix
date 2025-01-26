@@ -1,4 +1,4 @@
-import { initializeChat, startMessage, pollRunStatus, getChatHistory } from 'backend/chat.web';
+import { initializeChat, startMessage, pollRunStatus, getChatHistory, resetChat } from 'backend/chat.web';
 
 // Debug-Schalter für Frontend-Logging
 const ENABLE_FRONTEND_DEBUG = true;
@@ -63,6 +63,7 @@ $w.onReady(() => {
             function setInputEnabled(enabled) {
                 if (enabled) {
                     $w("#userInputTextBox").enable();
+                    $w("#resetButton").enable();
                     // Button nur aktivieren, wenn Text vorhanden
                     const currentText = $w("#userInputTextBox").value.trim();
                     if (currentText.length > 0) {
@@ -71,6 +72,7 @@ $w.onReady(() => {
                 } else {
                     $w("#userInputTextBox").disable();
                     $w("#submitMessageButton").disable();
+                    $w("#resetButton").disable();
                 }
             }
 
@@ -243,6 +245,59 @@ $w.onReady(() => {
             // Klick-Event für den "Senden"-Button
             $w("#submitMessageButton").onClick((event) => {
                 handleSubmit();
+            });
+
+            // Reset-Button Funktionalität
+            $w("#resetButton").onClick(async () => {
+                debugLog('[Frontend] Starte Chat-Reset');
+                
+                // UI-Elemente deaktivieren während des Resets
+                setInputEnabled(false);
+                
+                // Repeater leeren
+                $w('#chatRepeater').data = [];
+                
+                // Verbindungsinfo anzeigen
+                $w('#establishingConnectionInfo').show();
+                
+                try {
+                    // Chat zurücksetzen und neue Historie abrufen
+                    const resetResult = await resetChat();
+                    
+                    if (!resetResult.success) {
+                        throw new Error(resetResult.error || 'Fehler beim Zurücksetzen des Chats');
+                    }
+                    
+                    // Nachrichten in Frontend-Format konvertieren
+                    const initialData = resetResult.messages.reverse().map((message, index) => ({
+                        _id: (index + 1).toString(),
+                        assistant: message.role === 'assistant' ? message.content[0].text.value : null,
+                        user: message.role === 'user' ? message.content[0].text.value : null
+                    }));
+                    
+                    // Daten an Repeater binden
+                    $w('#chatRepeater').data = initialData;
+                    
+                    // Verbindungsinfo ausblenden
+                    $w('#establishingConnectionInfo').hide();
+                    
+                    // Eingabefeld leeren
+                    $w("#userInputTextBox").value = "";
+                    
+                    debugLog('[Frontend] Chat erfolgreich zurückgesetzt');
+                    
+                } catch (error) {
+                    debugError('[Frontend] Fehler beim Zurücksetzen des Chats:', error);
+                    // Fehlermeldung als Assistenten-Antwort anzeigen
+                    const errorMessage = {
+                        _id: "1",
+                        assistant: "Es ist ein technischer Fehler beim Zurücksetzen aufgetreten. Bitte versuchen Sie es später erneut."
+                    };
+                    $w("#chatRepeater").data = [errorMessage];
+                } finally {
+                    // UI-Elemente wieder aktivieren
+                    setInputEnabled(true);
+                }
             });
         })
         .catch(error => {
